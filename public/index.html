@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>會員繳費系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-6 mt-10">
+        <h1 class="text-2xl font-bold text-center text-blue-600 mb-6">會員繳費系統</h1>
+        
+        <form id="paymentForm" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">電話號碼</label>
+                <input type="tel" id="phone" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例: 61234567">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">姓名 / 別名</label>
+                <input type="text" id="name" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例: 張三 / 小明">
+                <p class="text-xs text-gray-500 mt-1">如有多个别名，请用逗号分隔</p>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">活動月份</label>
+                <input type="month" id="month" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">繳費金額</label>
+                <input type="number" id="amount" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例: 300">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">上傳入數紙</label>
+                <input type="file" id="receipt" accept="image/*" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            
+            <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors font-medium">
+                提交
+            </button>
+        </form>
+        
+        <div id="status" class="mt-4 hidden"></div>
+        
+        <div class="mt-6 pt-6 border-t border-gray-200">
+            <h2 class="text-lg font-semibold mb-3">查詢繳費狀態</h2>
+            <div class="flex gap-2">
+                <input type="tel" id="queryPhone" class="flex-1 px-3 py-2 border border-gray-300 rounded-md" placeholder="輸入電話號碼">
+                <button onclick="queryStatus()" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">查詢</button>
+            </div>
+            <div id="queryResult" class="mt-3 text-sm"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        
+        // Set default month to current
+        document.getElementById('month').value = new Date().toISOString().slice(0, 7);
+        
+        document.getElementById('paymentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const phone = document.getElementById('phone').value.trim();
+            const name = document.getElementById('name').value.trim();
+            const month = document.getElementById('month').value;
+            const amount = document.getElementById('amount').value;
+            const receipt = document.getElementById('receipt').files[0];
+            
+            const statusDiv = document.getElementById('status');
+            statusDiv.classList.remove('hidden', 'bg-green-100', 'text-green-700', 'bg-red-100', 'text-red-700');
+            statusDiv.classList.add('bg-blue-100', 'text-blue-700');
+            statusDiv.textContent = '上傳緊...';
+            
+            try {
+                // Upload image first
+                const formData = new FormData();
+                formData.append('file', receipt);
+                
+                const uploadRes = await fetch(`${API_BASE}/api/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!uploadRes.ok) throw new Error('上傳圖片失敗');
+                const { url } = await uploadRes.json();
+                
+                // Submit payment
+                const res = await fetch(`${API_BASE}/api/payment/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, name, month, amount: parseInt(amount), imageUrl: url })
+                });
+                
+                if (res.ok) {
+                    statusDiv.className = 'mt-4 p-3 bg-green-100 text-green-700 rounded-md';
+                    statusDiv.textContent = '✅ 提交成功！請等待審核。';
+                    document.getElementById('paymentForm').reset();
+                    document.getElementById('month').value = new Date().toISOString().slice(0, 7);
+                } else {
+                    const data = await res.json();
+                    throw new Error(data.message || '提交失敗');
+                }
+            } catch (err) {
+                statusDiv.className = 'mt-4 p-3 bg-red-100 text-red-700 rounded-md';
+                statusDiv.textContent = '❌ ' + err.message;
+            }
+        });
+        
+        async function queryStatus() {
+            const phone = document.getElementById('queryPhone').value.trim();
+            const resultDiv = document.getElementById('queryResult');
+            
+            if (!phone) {
+                resultDiv.innerHTML = '<span class="text-red-600">請輸入電話號碼</span>';
+                return;
+            }
+            
+            try {
+                const res = await fetch(`${API_BASE}/api/payment/status/${phone}`);
+                const data = await res.json();
+                
+                if (res.ok) {
+                    if (data.payments.length === 0) {
+                        resultDiv.innerHTML = '<span class="text-gray-600">沒有找到繳費記錄</span>';
+                    } else {
+                        const html = data.payments.map(p => {
+                            const statusColor = p.status === 'approved' ? 'text-green-600' : p.status === 'rejected' ? 'text-red-600' : 'text-yellow-600';
+                            const statusText = p.status === 'approved' ? '✅ 已批准' : p.status === 'rejected' ? '❌ 已拒絕' : '⏳ 審核中';
+                            return `<div class="border-b py-2">
+                                <div class="flex justify-between">
+                                    <span>${p.month}</span>
+                                    <span class="${statusColor}">${statusText}</span>
+                                </div>
+                                <div class="text-gray-600">$${p.amount}</div>
+                            </div>`;
+                        }).join('');
+                        resultDiv.innerHTML = html;
+                    }
+                } else {
+                    resultDiv.innerHTML = `<span class="text-red-600">${data.message}</span>`;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `<span class="text-red-600">查詢失敗</span>`;
+            }
+        }
+    </script>
+</body>
+</html>

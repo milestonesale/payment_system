@@ -1,0 +1,25 @@
+name = "payment-system"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "payment-system-prod"
+
+[[env.production.d1_databases]]
+database_name = "payment_system"
+database_id = "YOUR_D1_DATABASE_ID"
+
+[[env.production.r2_buckets]]
+binding = "RECEIPTS"
+bucket_name = "payment-receipts"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "payment_system"
+database_id = "YOUR_D1_DATABASE_ID_HERE"
+
+[[r2_buckets]]
+binding = "RECEIPTS"
+bucket_name = "payment-receipts"
+
+[triggers]
+crons = []
