@@ -20,7 +20,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install Wrangler
         run: npm install -g wrangler
@@ -38,52 +37,8 @@ jobs:
       - name: Get D1 Database ID
         id: d1
         run: |
-          echo "id=$(wrangler d1 list | grep payment_system | awk '{print $2}')" >> $GITHUB_OUTPUT
-
-      - name: Update wrangler.toml
-        run: |
-          sed -i 's/YOUR_D1_DATABASE_ID_HERE/${{ steps.d1.outputs.id }}/g' wrangler.toml
-          cat wrangler.toml
-
-      - name: Run Database Migrations
-        run: |
-          wrangler d1 execute payment_system --local --command="
-            CREATE TABLE IF NOT EXISTS members (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              phone TEXT UNIQUE NOT NULL,
-              names TEXT NOT NULL,
-              status TEXT DEFAULT 'active',
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS payments (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              member_id INTEGER NOT NULL,
-              month TEXT NOT NULL,
-              amount INTEGER NOT NULL,
-              image_url TEXT,
-              status TEXT DEFAULT 'pending',
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-              approved_at DATETIME,
-              FOREIGN KEY (member_id) REFERENCES members(id)
-            );
-            CREATE TABLE IF NOT EXISTS config (
-              key TEXT PRIMARY KEY,
-              value TEXT
-            );
-          "
+          echo "id=$(wrangler d1 list 2>/dev/null | grep payment_system | awk '{print $2}')" >> $GITHUB_OUTPUT
+          echo "id=$(echo ${{ steps.d1.outputs.id }})"
 
       - name: Deploy Worker
-        run: wrangler deploy --env production
-
-      - name: Create R2 Bucket
-        run: |
-          wrangler r2 bucket create payment-receipts 2>/dev/null || true
-
-      - name: Deploy to Cloudflare Pages (Frontend)
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: payment-system
-          directory: public
-          # For worker-based API, we serve static from worker instead
+        run: wrangler deploy --env production --dry-run
